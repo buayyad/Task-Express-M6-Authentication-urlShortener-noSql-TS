@@ -16,8 +16,7 @@ export const signup = async (
     const newUser = await User.create({ username, password: hashedPassword });
     const payload = { userId: newUser._id, username: newUser.username };
     const secret = process.env.JWT_SECRET!;
-    const options = { expiresIn: "1h" as const };
-    const token = jwt.sign(payload, secret, options);
+    const token = jwt.sign(payload, secret, { expiresIn: "1h" });
     res.status(201).json({ user: newUser, token });
   } catch (err) {
     next(err);
@@ -29,7 +28,24 @@ export const signin = async (
   res: Response,
   next: NextFunction
 ) => {
+  const { username, password } = req.body;
+
   try {
+    const user = await User.findOne({ username });
+    if (!user || !user.password) {
+      return res.status(400).json({ message: "Invalid credentials" });
+    }
+
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.status(400).json({ message: "Invalid credentials" });
+    }
+
+    const payload = { userId: user._id, username: user.username };
+    const secret = process.env.JWT_SECRET!;
+    const token = jwt.sign(payload, secret, { expiresIn: "1h" });
+
+    res.status(200).json({ token });
   } catch (err) {
     next(err);
   }

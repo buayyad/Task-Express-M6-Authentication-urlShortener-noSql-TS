@@ -10,14 +10,13 @@ export const shorten = async (
   res: Response,
   next: NextFunction
 ) => {
-  // create url code
   const urlCode = shortid.generate();
   try {
     req.body.shortUrl = `${baseUrl}/${urlCode}`;
     req.body.urlCode = urlCode;
-    req.body.userId = req.params.userId;
+    req.body.userId = (req as any).user.userId;
     const newUrl = await Url.create(req.body);
-    await User.findByIdAndUpdate(req.params.userId, {
+    await User.findByIdAndUpdate((req as any).user.userId, {
       $push: { urls: newUrl._id },
     });
     res.json(newUrl);
@@ -47,15 +46,26 @@ export const deleteUrl = async (
   req: Request,
   res: Response,
   next: NextFunction
-) => {
+): Promise<void> => {
   try {
     const url = await Url.findOne({ urlCode: req.params.code });
-    if (url) {
-      await Url.findByIdAndDelete(url._id);
-      res.status(201).json("Deleted");
-    } else {
+    if (!url) {
       res.status(404).json("No URL Found");
+      return;
     }
+
+    if (!url.userId || url.userId.toString() !== (req as any).user.userId) {
+      res.status(403).json({ message: "You can only delete your own URLs" });
+      return;
+    }
+
+    await Url.findByIdAndDelete(url._id);
+
+    await User.findByIdAndUpdate((req as any).user.userId, {
+      $pull: { urls: url._id },
+    });
+
+    res.status(200).json("Deleted");
   } catch (err) {
     next(err);
   }
